@@ -1,6 +1,6 @@
-ltl p1 {[]eating[0] -> }
+ltl p1 {[] ((<> eating[0]) && (<> eating[1]) && (<> eating[2]) && (<> eating[3]) && (<>eating[4])) }
 bool chopsticks [5] = {true, true, true, true, true}; //true = available
-bool eating [5] 
+bool eating [5];
 
 active [5] proctype philosopher() {
     int left_chopstick = _pid - 1;
@@ -20,12 +20,11 @@ active [5] proctype philosopher() {
             }
             fi
         }
-        eating[pid] = true;
-        eating[pid] = false;
+        eating[_pid] = true;
+        eating[_pid] = false;
         chopsticks[left_chopstick] = true;
         chopsticks[right_chopstick] = true;
     }
     od
 }
-
 
