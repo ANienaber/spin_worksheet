@@ -23,7 +23,7 @@ inline write(variable, index, value, id) {
 
 inline read(variable, index, value, id) {
     if
-    :: buffer[id]??[eval(variable),eval(index), value]; -> {
+    :: buffer[id]??[eval(variable),eval(index), value] -> {
         mtype read_var;
         int read_index;
         int read_val;
@@ -69,11 +69,17 @@ proctype prop(int id) {
     do
     :: buffer[id]?X,0,x;
     :: buffer[id]?Y,0,y;
-    :: buffer[id]?TURN,index,value -> {
-        turn[index] = value;
+    :: buffer[id]?[TURN,index,value] -> {
+        atomic {
+            buffer[id]?TURN,index,value;
+            turn[index] = value;
+        }
     }
-    :: buffer[id]?LEVEL,index,value -> {
-        level[index] = value;
+    :: buffer[id]?[LEVEL,index,value] -> {
+        atomic {
+            buffer[id]?LEVEL,index,value;
+            level[index] = value;
+        }
     }
     od
 }
@@ -81,8 +87,8 @@ proctype prop(int id) {
 init {
     int count = 0;
     do 
-    :: count < N -> {
-        run litmus(count);
+    :: count < 2 -> {
+        run dekker(count);
         run prop(count);
         count++;
     }
@@ -100,17 +106,32 @@ proctype dekker(int id) {
         int i = 1;
         do 
         :: i < N -> {
-            level[me] = i;
-            turn[i] = me;
+            write(LEVEL, me, i, me);
+            write(TURN, i, me, me);
+            fence(me);
             int k;
             bool no_k_found;
             do 
             :: no_k_found -> break;
-            :: else -> atomic {
+            :: else -> {
                 do
-                :: k < N && k != me && level[k] >= i && turn[i] == me -> {k = 0; break;};
-                :: k < N && !(k != me && level[k] >= i && turn[i] == me) -> k++;
-                :: else -> {no_k_found = true; break;}
+                :: k < N -> {
+                    int levelk;
+                    read(LEVEL, k, levelk, me);
+                    int turni;
+                    read(TURN, i, turni, me);
+                    if 
+                    :: k != me && levelk >= i && turni == me -> {
+                        k = 0;
+                        break;
+                    }
+                    :: else -> k++;
+                    fi
+                }
+                :: else -> {
+                    no_k_found = true;
+                    break;
+                }
                 od
             }
             od
@@ -131,7 +152,7 @@ proctype dekker(int id) {
         critical[me] = false;
         //end critical
         //start unlock
-        level[me] = 0;
+        write(LEVEL, me, 0, me);
         //end unlock
     }
     od
@@ -142,6 +163,7 @@ proctype litmus(int id) {
     if 
     :: id == 0 -> {
         write(X, 0, 1, id);
+        fence(id);
         read(Y, 0, r0, id);
     }
     :: id == 1 -> {
@@ -153,9 +175,10 @@ proctype litmus(int id) {
     atEnd[id] = true;
 }
 
-active proctype monitor() {
-    (atEnd[0] && atEnd[1]) -> assert((r0 == 0 && r1 == 0));
-}
+/* active proctype monitor() {
+    (atEnd[0] && atEnd[1]);
+    assert(!(r0 == 0 && r1 == 0));
+} */
 
 //d) the assertion in line 78 is violated so the interesting
 // outcome is indeed observable
